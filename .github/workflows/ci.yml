@@ -16,10 +16,11 @@ jobs:
       matrix:
         go: ['1.22', 'stable']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
+          cache: false
 
       - name: gofmt
         run: |
@@ -55,8 +56,9 @@ jobs:
   govulncheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

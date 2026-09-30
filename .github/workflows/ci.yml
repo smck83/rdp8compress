@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ['1.22', 'stable']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "Not gofmt-ed:"; echo "$out"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Standard library only
+        run: |
+          deps=$(go list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./... | grep -v '^github.com/smck83/rdp8compress' || true)
+          if [ -n "$deps" ]; then echo "Non-stdlib dependencies:"; echo "$deps"; exit 1; fi
+
+      - name: Build without cgo
+        run: CGO_ENABLED=0 go build ./...
+
+      - name: Test (race, coverage)
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: Coverage >= 90%
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$3); print $3}')
+          echo "coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t >= 90) ? 0 : 1 }'
+
+      - name: Fuzz (30s)
+        run: go test -run '^$' -fuzz '^FuzzDecompress$' -fuzztime 30s .
+
+      - name: Benchmark smoke run
+        run: go test -run '^$' -bench . -benchtime 1x .
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
